@@ -1,6 +1,6 @@
 module auth_service
 
-go 1.25.3
+go 1.25.5
 
 require (
 	github.com/go-chi/chi v1.5.5

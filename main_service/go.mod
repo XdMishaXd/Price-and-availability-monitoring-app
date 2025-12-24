@@ -1,6 +1,6 @@
 module main_service
 
-go 1.25.3
+go 1.25.5
 
 require (
 	github.com/go-playground/validator/v10 v10.30.0

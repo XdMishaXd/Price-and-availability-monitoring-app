@@ -39,10 +39,6 @@ type RabbitMQ struct {
 	ParsingQueueName       string `yaml:"parsing_queue_name" env-default:"parsing_queue"`
 }
 
-type MongoDB struct {
-	URL string `yaml:"url" env-required:"true"`
-}
-
 type Redis struct {
 	Addr string `yaml:"addr" env-default:"redis:6379"`
 	Db   int    `yaml:"db" env-default:"1"`
