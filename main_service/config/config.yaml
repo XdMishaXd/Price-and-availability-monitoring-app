@@ -1,0 +1,26 @@
+env: "local" # local, dev, prod 
+
+http_server:
+  address: ":8080"
+  timeout: 4s
+  idle_timeout: 30s
+
+jwt_secret: ""
+check_interval: 30m
+
+redis:
+  db: 0
+  addr: "redis:6379"
+
+rabbitmq:
+  url: "amqp://user:password@rabbitmq:5672/"
+  notifications_queue_name: ""
+  parsing_queue_name: ""
+
+postgres:
+  host: "postgres"
+  port: 5432
+  user: "user"
+  password: "password"
+  dbname: "price_monitoring_app"
+  sslmode: "disable"
