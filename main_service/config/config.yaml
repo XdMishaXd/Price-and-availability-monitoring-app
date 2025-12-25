@@ -11,11 +11,11 @@ check_interval: 30m
 redis:
   db: 0
   addr: "redis:6379"
+  default_ttl: 1m # TTL для кешированных продуктов
 
 rabbitmq:
   url: "amqp://user:password@rabbitmq:5672/"
-  notifications_queue_name: ""
-  parsing_queue_name: ""
+  queue_name: ""
 
 postgres:
   host: "postgres"

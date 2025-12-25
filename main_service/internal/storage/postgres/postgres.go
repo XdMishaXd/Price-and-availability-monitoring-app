@@ -19,7 +19,7 @@ type PostgresRepo struct {
 }
 
 func New(ctx context.Context, cfg *config.Config) (*PostgresRepo, error) {
-	const op = "storage.postgres.New"
+	const op = "storage.storage.postgres.New"
 
 	dsn := dsn(cfg)
 
@@ -47,7 +47,7 @@ func New(ctx context.Context, cfg *config.Config) (*PostgresRepo, error) {
 
 // * SaveProduct добавляет продукт в базу данных
 func (r *PostgresRepo) SaveProduct(ctx context.Context, userID int64, productURL, title string) (int64, error) {
-	const op = "postgres.SaveProduct"
+	const op = "storage.postgres.SaveProduct"
 
 	const query = `
 		INSERT INTO products (user_id, url, title)
@@ -71,7 +71,7 @@ func (r *PostgresRepo) SaveProduct(ctx context.Context, userID int64, productURL
 
 // * Products возвращает слайс продуктов для вывода пользователю
 func (r *PostgresRepo) Products(ctx context.Context, userID int64, limit, offset int) ([]models.Product, error) {
-	const op = "postgres.Products"
+	const op = "storage.postgres.Products"
 
 	const query = `
 		SELECT id, title, price, in_stock, last_checked, created_at, updated_at
@@ -116,7 +116,7 @@ func (r *PostgresRepo) Products(ctx context.Context, userID int64, limit, offset
 
 // * ProductByID возвращает продукт по ID
 func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models.Product, error) {
-	const op = "postgres.ProductByID"
+	const op = "storage.postgres.ProductByID"
 
 	const query = `
 		SELECT id, title, price, in_stock, last_checked, created_at, updated_at
@@ -150,7 +150,7 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 
 // * UpdateParsedData добавляет информацию о цене и наличии продукта
 func (r *PostgresRepo) UpdateParsedData(ctx context.Context, productID int64, price int, inStock bool) error {
-	const op = "postgres.UpdateParsedData"
+	const op = "storage.postgres.UpdateParsedData"
 
 	const query = `
 		UPDATE products
@@ -175,7 +175,7 @@ func (r *PostgresRepo) UpdateParsedData(ctx context.Context, productID int64, pr
 
 // * DeleteProduct удаляет продукт по productID и userID
 func (r *PostgresRepo) DeleteProduct(ctx context.Context, productID, userID int64) error {
-	const op = "postgres.DeleteProduct"
+	const op = "storage.postgres.DeleteProduct"
 
 	const query = `
 		DELETE FROM products 

@@ -34,9 +34,8 @@ type Postgres struct {
 }
 
 type RabbitMQ struct {
-	URL                    string `yaml:"url" env-required:"true"`
-	NotificationsQueueName string `yaml:"notifications_queue_name" env-default:"notifications_queue"`
-	ParsingQueueName       string `yaml:"parsing_queue_name" env-default:"parsing_queue"`
+	URL       string `yaml:"url" env-required:"true"`
+	QueueName string `yaml:"queue_name" env-default:"parsing_queue"`
 }
 
 type Redis struct {
