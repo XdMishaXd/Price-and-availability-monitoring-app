@@ -17,7 +17,7 @@ type ProductForProducer struct {
 	URL string `json:"url"`
 }
 
-type ProcutForConsumer struct {
+type ParsedProduct struct {
 	ID       int64 `json:"id"`
 	Price    int   `json:"price"`
 	In_stock bool  `json:"in_stock"`

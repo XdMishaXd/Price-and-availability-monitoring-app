@@ -7,11 +7,12 @@ import (
 )
 
 type RabbitMQClient struct {
-	conn    *amqp.Connection
-	channel *amqp.Channel
+	conn      *amqp.Connection
+	channel   *amqp.Channel
+	QueueName string
 }
 
-func New(url string) (*RabbitMQClient, error) {
+func New(url, queueName string) (*RabbitMQClient, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, fmt.Errorf("rabbitmq dial: %w", err)
@@ -24,8 +25,9 @@ func New(url string) (*RabbitMQClient, error) {
 	}
 
 	return &RabbitMQClient{
-		conn:    conn,
-		channel: ch,
+		conn:      conn,
+		channel:   ch,
+		QueueName: queueName,
 	}, nil
 }
 

@@ -11,20 +11,21 @@ import (
 type HandlerFunc func(ctx context.Context, body []byte) error
 
 type Consumer struct {
-	ch  *amqp.Channel
-	log *slog.Logger
+	ch        *amqp.Channel
+	log       *slog.Logger
+	queueName string
 }
 
-func NewConsumer(ch *amqp.Channel, log *slog.Logger) *Consumer {
+func NewConsumer(ch *amqp.Channel, log *slog.Logger, queueName string) *Consumer {
 	return &Consumer{
-		ch:  ch,
-		log: log,
+		ch:        ch,
+		log:       log,
+		queueName: queueName,
 	}
 }
 
 func (c *Consumer) Consume(
 	ctx context.Context,
-	queue string,
 	handler HandlerFunc,
 ) error {
 	const op = "rabbitmq.Consume"
@@ -38,7 +39,7 @@ func (c *Consumer) Consume(
 	}
 
 	msgs, err := c.ch.Consume(
-		queue,
+		c.queueName,
 		"",
 		false,
 		false,

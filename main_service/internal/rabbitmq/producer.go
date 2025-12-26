@@ -8,16 +8,19 @@ import (
 )
 
 type Producer struct {
-	ch *amqp.Channel
+	ch        *amqp.Channel
+	queueName string
 }
 
-func NewProducer(ch *amqp.Channel) *Producer {
-	return &Producer{ch: ch}
+func NewProducer(ch *amqp.Channel, queueName string) *Producer {
+	return &Producer{
+		ch:        ch,
+		queueName: queueName,
+	}
 }
 
 func (p *Producer) PublishJSON(
 	ctx context.Context,
-	queue string,
 	msg any,
 ) error {
 	body, err := json.Marshal(msg)
@@ -28,7 +31,7 @@ func (p *Producer) PublishJSON(
 	return p.ch.PublishWithContext(
 		ctx,
 		"",
-		queue,
+		p.queueName,
 		false,
 		false,
 		amqp.Publishing{
