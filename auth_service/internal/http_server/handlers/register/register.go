@@ -1,14 +1,15 @@
 package register
 
 import (
-	"auth_service/internal/auth"
-	resp "auth_service/internal/lib/api/response"
-	sl "auth_service/internal/lib/logger"
-	"auth_service/internal/lib/verification"
 	"context"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"auth_service/internal/auth"
+	resp "auth_service/internal/lib/api/response"
+	sl "auth_service/internal/lib/logger"
+	"auth_service/internal/lib/verification"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -27,8 +28,10 @@ type Response struct {
 	UserID int64 `json:"user_id"`
 }
 
-func New(ctx context.Context,
+func New(
+	ctx context.Context,
 	log *slog.Logger,
+	validate *validator.Validate,
 	authMiddleware auth.Auth,
 	msgSender verification.Publisher,
 	verificationTokenTTL time.Duration,
@@ -56,11 +59,12 @@ func New(ctx context.Context,
 
 		log.Info("Request body decoded")
 
-		if err := validator.New().Struct(req); err != nil {
+		if err := validate.Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
 
 			log.Error("Invalid request", sl.Err(err))
 
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.ValidationError(validateErr))
 
 			return
@@ -70,6 +74,7 @@ func New(ctx context.Context,
 		if err != nil {
 			log.Error("failed to register user", sl.Err(err))
 
+			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("Internal error"))
 
 			return
@@ -90,11 +95,13 @@ func New(ctx context.Context,
 		if err != nil {
 			log.Error("Failed to send verification email", sl.Err(err))
 
+			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("Internal error"))
 
 			return
 		}
 
+		render.Status(r, http.StatusCreated)
 		ResponseOK(w, r, userID)
 	}
 }

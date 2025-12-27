@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -11,16 +12,18 @@ import (
 type HandlerFunc func(ctx context.Context, body []byte) error
 
 type Consumer struct {
-	ch        *amqp.Channel
-	log       *slog.Logger
-	queueName string
+	ch             *amqp.Channel
+	log            *slog.Logger
+	queueName      string
+	workerPoolSize int
 }
 
-func NewConsumer(ch *amqp.Channel, log *slog.Logger, queueName string) *Consumer {
+func NewConsumer(ch *amqp.Channel, log *slog.Logger, queueName string, poolSize int) *Consumer {
 	return &Consumer{
-		ch:        ch,
-		log:       log,
-		queueName: queueName,
+		ch:             ch,
+		log:            log,
+		queueName:      queueName,
+		workerPoolSize: poolSize,
 	}
 }
 
@@ -31,7 +34,7 @@ func (c *Consumer) Consume(
 	const op = "rabbitmq.Consume"
 
 	if err := c.ch.Qos(
-		1,
+		c.workerPoolSize,
 		0,
 		false,
 	); err != nil {
@@ -52,38 +55,47 @@ func (c *Consumer) Consume(
 	}
 
 	go func() {
+		var wg sync.WaitGroup
+		semaphore := make(chan struct{}, 10) // макс. 10 параллельных обработок
+
 		for {
 			select {
 			case <-ctx.Done():
+				wg.Wait()
 				return
-
 			case msg, ok := <-msgs:
 				if !ok {
-					c.log.Warn(
-						"consumer channel closed",
-						slog.String("op", op),
-					)
+					wg.Wait()
 					return
 				}
 
-				if err := handler(ctx, msg.Body); err != nil {
-					if err := msg.Nack(false, true); err != nil {
-						c.log.Error(
-							"nack failed",
-							slog.String("op", op),
-							slog.Any("error", err),
-						)
-					}
-					continue
-				}
+				wg.Add(1)
+				semaphore <- struct{}{}
 
-				if err := msg.Ack(false); err != nil {
-					c.log.Error(
-						"ack failed",
-						slog.String("op", op),
-						slog.Any("error", err),
-					)
-				}
+				go func(m amqp.Delivery) {
+					defer wg.Done()
+					defer func() { <-semaphore }()
+
+					if err := handler(ctx, m.Body); err != nil {
+						err := m.Nack(false, true)
+						if err != nil {
+							c.log.Error(
+								"nack failed",
+								slog.String("op", op),
+								slog.Any("error", err),
+							)
+						}
+					} else {
+						err := m.Ack(false)
+						if err != nil {
+							c.log.Error(
+								"ack failed",
+								slog.String("op", op),
+								slog.Any("error", err),
+							)
+						}
+					}
+				}(msg)
 			}
 		}
 	}()

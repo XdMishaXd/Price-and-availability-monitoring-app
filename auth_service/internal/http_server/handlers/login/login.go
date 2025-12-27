@@ -1,13 +1,14 @@
 package login
 
 import (
-	"auth_service/internal/auth"
-	resp "auth_service/internal/lib/api/response"
-	sl "auth_service/internal/lib/logger"
 	"context"
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"auth_service/internal/auth"
+	resp "auth_service/internal/lib/api/response"
+	sl "auth_service/internal/lib/logger"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -28,6 +29,7 @@ type Response struct {
 
 func New(ctx context.Context,
 	log *slog.Logger,
+	validate *validator.Validate,
 	authMiddleware auth.Auth,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +46,7 @@ func New(ctx context.Context,
 		if err != nil {
 			log.Error("Failed to decode request body", sl.Err(err))
 
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("Failed to decode request"))
 
 			return
@@ -51,9 +54,10 @@ func New(ctx context.Context,
 
 		log.Info("Request body decoded")
 
-		if err := validator.New().Struct(req); err != nil {
+		if err := validate.Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
 
+			render.Status(r, http.StatusBadRequest)
 			log.Error("Invalid request", sl.Err(err))
 
 			render.JSON(w, r, resp.ValidationError(validateErr))
@@ -63,17 +67,17 @@ func New(ctx context.Context,
 
 		accessToken, refreshToken, err := authMiddleware.Login(ctx, req.Email, req.Pass, req.AppID)
 		if err != nil {
-			if errors.Is(auth.ErrInvalidCredentials, err) {
+			if errors.Is(err, auth.ErrInvalidCredentials) {
 				render.JSON(w, r, resp.Error("Invalid credentials"))
 
 				return
 			}
-			if errors.Is(auth.ErrInvalidAppID, err) {
+			if errors.Is(err, auth.ErrInvalidCredentials) {
 				render.JSON(w, r, resp.Error("Invalid app id"))
 
 				return
 			}
-			if errors.Is(auth.ErrEmailNotVerified, err) {
+			if errors.Is(err, auth.ErrInvalidCredentials) {
 				render.JSON(w, r, resp.Error("email is not verified"))
 
 				return
@@ -81,6 +85,7 @@ func New(ctx context.Context,
 
 			log.Error("failed to login user", sl.Err(err))
 
+			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("Internal error"))
 
 			return

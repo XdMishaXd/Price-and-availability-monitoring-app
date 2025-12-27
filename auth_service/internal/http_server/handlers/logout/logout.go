@@ -1,13 +1,14 @@
 package logout
 
 import (
-	"auth_service/internal/auth"
-	resp "auth_service/internal/lib/api/response"
-	sl "auth_service/internal/lib/logger"
 	"context"
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"auth_service/internal/auth"
+	resp "auth_service/internal/lib/api/response"
+	sl "auth_service/internal/lib/logger"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -25,6 +26,7 @@ type Response struct {
 func New(
 	ctx context.Context,
 	log *slog.Logger,
+	validate *validator.Validate,
 	authMiddleware auth.Auth,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -41,6 +43,7 @@ func New(
 		if err != nil {
 			log.Error("Failed to decode request body", sl.Err(err))
 
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("Failed to decode request"))
 
 			return
@@ -48,9 +51,10 @@ func New(
 
 		log.Info("Request body decoded")
 
-		if err := validator.New().Struct(req); err != nil {
+		if err := validate.Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
 
+			render.Status(r, http.StatusBadRequest)
 			log.Error("Invalid request", sl.Err(err))
 
 			render.JSON(w, r, resp.ValidationError(validateErr))
@@ -61,12 +65,13 @@ func New(
 		if err := authMiddleware.Logout(ctx, req.RefreshToken); err != nil {
 			log.Error("failed to logout user", sl.Err(err))
 
-			if errors.Is(auth.ErrInvalidCredentials, err) {
+			if errors.Is(err, auth.ErrInvalidCredentials) {
 				render.JSON(w, r, resp.Error("invalid credentials"))
 
 				return
 			}
 
+			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("Internal error"))
 
 			return

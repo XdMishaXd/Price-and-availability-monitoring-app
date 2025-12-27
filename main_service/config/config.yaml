@@ -16,6 +16,7 @@ redis:
 rabbitmq:
   url: "amqp://user:password@rabbitmq:5672/"
   queue_name: ""
+  worker_pool_size: 10
 
 postgres:
   host: "postgres"

@@ -3,6 +3,8 @@ module main_service
 go 1.25.5
 
 require (
+	github.com/go-chi/chi v1.5.5
+	github.com/go-chi/render v1.0.3
 	github.com/go-playground/validator/v10 v10.30.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
@@ -14,6 +16,7 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
+	github.com/ajg/form v1.5.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect

@@ -1,6 +1,14 @@
 package main
 
 import (
+	"context"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"auth_service/internal/auth"
 	"auth_service/internal/config"
 	"auth_service/internal/http_server/handlers/login"
@@ -10,16 +18,10 @@ import (
 	"auth_service/internal/http_server/handlers/verify"
 	"auth_service/internal/rabbitmq"
 	"auth_service/internal/storage/postgres"
-	"context"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -46,6 +48,8 @@ func main() {
 		cancel()
 	}()
 
+	validate := validator.New()
+
 	storage, err := postgres.New(ctx, cfg)
 	if err != nil {
 		log.Error("failed to connect postgres", slog.String("err", err.Error()))
@@ -60,11 +64,19 @@ func main() {
 	}
 	defer msgBroker.Close()
 
-	authService := auth.New(log, storage, storage, storage, cfg.Tokens.AccessTokenTTL, cfg.Tokens.RefreshTokenTTL)
+	authService := auth.New(
+		log,
+		storage,
+		storage,
+		storage,
+		cfg.Tokens.AccessTokenTTL,
+		cfg.Tokens.RefreshTokenTTL,
+	)
 
 	router := setupRouter(
 		ctx,
 		log,
+		validate,
 		*authService,
 		*msgBroker,
 		cfg.Tokens.VerificationTokenTTL,
@@ -107,6 +119,7 @@ func main() {
 func setupRouter(
 	ctx context.Context,
 	log *slog.Logger,
+	validate *validator.Validate,
 	authService auth.Auth,
 	msgBroker rabbitmq.RabbitMQClient,
 	verificationTokenTTL time.Duration,
@@ -119,16 +132,16 @@ func setupRouter(
 	r.Use(middleware.Recoverer)
 
 	r.Post("/register",
-		register.New(ctx, log, authService, &msgBroker, verificationTokenTTL, verificationTokenSecret, address),
+		register.New(ctx, log, validate, authService, &msgBroker, verificationTokenTTL, verificationTokenSecret, address),
 	)
 	r.Post("/login",
-		login.New(ctx, log, authService),
+		login.New(ctx, log, validate, authService),
 	)
 	r.Post("/refresh",
-		refresh.New(ctx, log, authService),
+		refresh.New(ctx, log, validate, authService),
 	)
 	r.Post("/logout",
-		logout.New(ctx, log, authService),
+		logout.New(ctx, log, validate, authService),
 	)
 	r.Get("/verify",
 		verify.New(ctx, log, authService, verificationTokenSecret),
