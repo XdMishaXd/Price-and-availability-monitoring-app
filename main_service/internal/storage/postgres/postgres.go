@@ -82,7 +82,11 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 	if err != nil {
 		return nil, 0, fmt.Errorf("%s: begin tx: %w", op, err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			fmt.Printf("failed to rollback transaction: %v\n", err)
+		}
+	}()
 
 	// * Получаем продукты
 	query := `
@@ -91,7 +95,7 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
       WHERE user_id = $1
       ORDER BY created_at DESC
       LIMIT $2 OFFSET $3
-    `
+  `
 
 	rows, err := tx.Query(ctx, query, userID, limit, offset)
 	if err != nil {

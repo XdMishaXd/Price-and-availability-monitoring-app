@@ -2,6 +2,7 @@ package authMiddlware
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -15,25 +16,59 @@ type contextKey string
 
 const UserIDKey contextKey = "user_id"
 
-func AuthMiddleware(jwtParser jwt.JWTParser) func(next http.Handler) http.Handler {
+func New(log *slog.Logger, jwtParser jwt.JWTParser) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			const op = "middleware.auth.New"
+
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
+				log.Warn("Missing authorization header",
+					slog.String("op", op),
+					slog.String("path", r.URL.Path),
+				)
+
 				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, resp.Error("Missing authorization"))
+
 				return
 			}
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
+			if token == "" {
+				log.Warn("Empty token",
+					slog.String("op", op),
+					slog.String("path", r.URL.Path),
+				)
+
+				render.Status(r, http.StatusUnauthorized)
+				render.JSON(w, r, resp.Error("Empty token"))
+
+				return
+			}
+
 			userID, err := jwtParser.ParseToken(token)
 			if err != nil {
+				log.Warn("Invalid token",
+					slog.String("op", op),
+					slog.String("path", r.URL.Path),
+					slog.String("error", err.Error()),
+				)
+
 				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, resp.Error("Invalid token"))
+
 				return
 			}
 
 			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+
+			log.Debug("User authenticated",
+				slog.String("op", op),
+				slog.Int64("user_id", userID),
+				slog.String("path", r.URL.Path),
+			)
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

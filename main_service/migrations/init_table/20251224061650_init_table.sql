@@ -6,7 +6,7 @@ CREATE TABLE products
 	user_id BIGINT NOT NULL,
 	url TEXT NOT NULL,
 	title TEXT NOT NULL,
-	price INTEGER,
+	price INTEGER DEFAULT -1,
 	in_stock BOOLEAN DEFAULT FALSE,
 	last_checked TIMESTAMPTZ,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

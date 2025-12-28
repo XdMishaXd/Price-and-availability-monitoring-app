@@ -56,7 +56,7 @@ func (c *Consumer) Consume(
 
 	go func() {
 		var wg sync.WaitGroup
-		semaphore := make(chan struct{}, 10) // макс. 10 параллельных обработок
+		semaphore := make(chan struct{}, 10) // * макс. 10 параллельных обработок
 
 		for {
 			select {
