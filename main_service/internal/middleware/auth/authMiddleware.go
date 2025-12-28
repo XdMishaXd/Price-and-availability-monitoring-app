@@ -13,7 +13,7 @@ import (
 
 type contextKey string
 
-const userIDKey contextKey = "user_id"
+const UserIDKey contextKey = "user_id"
 
 func AuthMiddleware(jwtParser jwt.JWTParser) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -33,7 +33,7 @@ func AuthMiddleware(jwtParser jwt.JWTParser) func(next http.Handler) http.Handle
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), userIDKey, userID)
+			ctx := context.WithValue(r.Context(), UserIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

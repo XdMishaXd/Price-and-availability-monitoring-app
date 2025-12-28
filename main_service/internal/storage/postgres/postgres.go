@@ -10,7 +10,8 @@ import (
 	"main_service/internal/models"
 	"main_service/internal/storage"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -59,7 +60,7 @@ func (r *PostgresRepo) SaveProduct(ctx context.Context, userID int64, productURL
 
 	err := r.pool.QueryRow(ctx, query, userID, productURL, title).Scan(&id)
 	if err != nil {
-		if pgErr, ok := err.(*pgx.PgError); ok && pgErr.Code == storage.UniqueViolation {
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == storage.UniqueViolation {
 			return 0, storage.ErrUserAlreadyTracksProduct
 		}
 
@@ -70,48 +71,52 @@ func (r *PostgresRepo) SaveProduct(ctx context.Context, userID int64, productURL
 }
 
 // * Products возвращает слайс продуктов для вывода пользователю
-func (r *PostgresRepo) Products(ctx context.Context, userID int64, limit, offset int) ([]models.Product, error) {
-	const op = "storage.postgres.Products"
+func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64) ([]models.Product, int64, error) {
+	const op = "storage.Postgres.Products"
 
-	const query = `
-		SELECT id, title, price, in_stock, last_checked, created_at, updated_at
-		FROM products 
-		WHERE user_id = $1 
-		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3;
-	`
-
-	rows, err := r.pool.Query(ctx, query, userID, limit, offset)
+	// * Начинаем read-only транзакцию
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.ReadCommitted,
+		AccessMode: pgx.ReadOnly,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed to get products: %w", op, err)
+		return nil, 0, fmt.Errorf("%s: begin tx: %w", op, err)
 	}
-	defer rows.Close()
+	defer tx.Rollback(ctx)
 
-	var products []models.Product
-	for rows.Next() {
-		var p models.Product
+	// * Получаем продукты
+	query := `
+    SELECT id, url, title, user_id, created_at, updated_at
+      FROM products
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
+    `
 
-		err := rows.Scan(
-			&p.ID,
-			&p.Title,
-			&p.Price,
-			&p.In_stock,
-			&p.Last_checked,
-			&p.Created_at,
-			&p.Updated_at,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("%s: failed to scan products: %w", op, err)
-		}
-
-		products = append(products, p)
+	rows, err := tx.Query(ctx, query, userID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%s: query: %w", op, err)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+	products, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.Product])
+	if err != nil {
+		return nil, 0, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
-	return products, nil
+	// * Получаем count
+	var total int64
+	countQuery := `SELECT COUNT(*) FROM products WHERE user_id = $1`
+	err = tx.QueryRow(ctx, countQuery, userID).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%s: count: %w", op, err)
+	}
+
+	// * Коммитим read-only транзакцию
+	if err := tx.Commit(ctx); err != nil {
+		return nil, 0, fmt.Errorf("%s: commit: %w", op, err)
+	}
+
+	return products, total, nil
 }
 
 // * ProductByID возвращает продукт по ID

@@ -8,6 +8,7 @@ import (
 	resp "main_service/internal/lib/api/response"
 	"main_service/internal/lib/jwt"
 	sl "main_service/internal/lib/logger"
+	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/middleware/products"
 
 	"github.com/go-chi/chi/middleware"
@@ -66,7 +67,7 @@ func New(
 			return
 		}
 
-		userID, ok := r.Context().Value("user_id").(int64)
+		userID, ok := r.Context().Value(authMiddlware.UserIDKey).(int64)
 		if !ok {
 			log.Error("User ID not found in context")
 
