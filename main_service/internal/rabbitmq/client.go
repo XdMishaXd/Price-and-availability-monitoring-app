@@ -8,7 +8,7 @@ import (
 
 type RabbitMQClient struct {
 	conn    *amqp.Connection
-	channel *amqp.Channel
+	Channel *amqp.Channel
 }
 
 func New(url string) (*RabbitMQClient, error) {
@@ -25,12 +25,12 @@ func New(url string) (*RabbitMQClient, error) {
 
 	return &RabbitMQClient{
 		conn:    conn,
-		channel: ch,
+		Channel: ch,
 	}, nil
 }
 
 func (c *RabbitMQClient) Close() error {
-	if err := c.channel.Close(); err != nil {
+	if err := c.Channel.Close(); err != nil {
 		return err
 	}
 	return c.conn.Close()

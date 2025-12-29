@@ -21,23 +21,23 @@ type PostgresStorage interface {
 	ProductByID(ctx context.Context, productID int64) (models.Product, error)
 }
 
-type RabbitMQ interface {
+type RabbitMQProducer interface {
 	PublishJSON(ctx context.Context, msg any) error
 }
 
 type ProductOperator struct {
-	CheckInterval time.Duration
-	Redis         RedisStorage
-	Postgres      PostgresStorage
-	Rabbitmq      RabbitMQ
+	CheckInterval    time.Duration
+	Redis            RedisStorage
+	Postgres         PostgresStorage
+	RabbitMQProducer RabbitMQProducer
 }
 
-func New(p PostgresStorage, r RedisStorage, rabbit RabbitMQ, checkInterval time.Duration) *ProductOperator {
+func New(p PostgresStorage, r RedisStorage, rabbit RabbitMQProducer, checkInterval time.Duration) *ProductOperator {
 	return &ProductOperator{
-		CheckInterval: checkInterval,
-		Redis:         r,
-		Postgres:      p,
-		Rabbitmq:      rabbit,
+		CheckInterval:    checkInterval,
+		Redis:            r,
+		Postgres:         p,
+		RabbitMQProducer: rabbit,
 	}
 }
 
@@ -57,7 +57,7 @@ func (p *ProductOperator) SaveProduct(ctx context.Context, url, title string, us
 		return 0, fmt.Errorf("failed to serialize product: %w", err)
 	}
 
-	err = p.Rabbitmq.PublishJSON(ctx, data)
+	err = p.RabbitMQProducer.PublishJSON(ctx, data)
 	if err != nil {
 		return 0, err
 	}

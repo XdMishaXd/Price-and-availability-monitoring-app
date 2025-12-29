@@ -1,68 +1,48 @@
-package addProduct
+package deleteProduct
 
 import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	resp "main_service/internal/lib/api/response"
 	"main_service/internal/lib/jwt"
 	sl "main_service/internal/lib/logger"
 	authMiddlware "main_service/internal/middleware/auth"
-	"main_service/internal/middleware/products"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
-	validator "github.com/go-playground/validator/v10"
 )
-
-type Request struct {
-	URL   string `json:"url" validate:"required,url"`
-	Title string `json:"title" validate:"required"`
-}
 
 type Response struct {
 	resp.Response
-	ProductID int64 `json:"product_id"`
+}
+
+type ProductsRemover interface {
+	DeleteProduct(ctx context.Context, productID, userID int64) error
 }
 
 func New(
 	ctx context.Context,
 	log *slog.Logger,
-	prodOp products.ProductOperator,
+	prodOp ProductsRemover,
 	jwtParser jwt.JWTParser,
-	validate *validator.Validate,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "handlers.products.add.New"
+		const op = "handlers.products.delete.New"
 
 		log = log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var req Request
-
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // * 1 МБ лимит запроса
-		err := render.DecodeJSON(r.Body, &req)
-		if err != nil {
-			log.Error("Failed to decode request body", sl.Err(err))
+		productID := parseProductID(r)
+		if productID == -1 {
+			log.Error("Invalid id")
 
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("Failed to decode request"))
-
-			return
-		}
-
-		log.Info("Request body decoded")
-
-		if err := validate.Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-
-			log.Error("Invalid request", sl.Err(err))
-
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.ValidationError(validateErr))
+			render.JSON(w, r, resp.Error("Invalid id"))
 
 			return
 		}
@@ -86,9 +66,13 @@ func New(
 			return
 		}
 
-		productID, err := prodOp.SaveProduct(ctx, req.URL, req.Title, userID)
+		err := prodOp.DeleteProduct(ctx, productID, userID)
 		if err != nil {
-			log.Error("Failed to save product", sl.Err(err))
+			log.Error("Failed to delete product",
+				sl.Err(err),
+				slog.Int64("user_id", userID),
+				slog.Int64("productID", productID),
+			)
 
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("Internal error"))
@@ -96,19 +80,31 @@ func New(
 			return
 		}
 
-		log.Info("Product saved successfully",
+		log.Info("Product deleted successfully",
 			slog.Int64("product_id", productID),
 			slog.Int64("user_id", userID),
 		)
 
-		render.Status(r, http.StatusCreated)
-		ResponseOK(w, r, productID)
+		ResponseOK(w, r)
 	}
 }
 
-func ResponseOK(w http.ResponseWriter, r *http.Request, id int64) {
+func ResponseOK(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, Response{
-		Response:  resp.OK(),
-		ProductID: id,
+		Response: resp.OK(),
 	})
+}
+
+func parseProductID(r *http.Request) int64 {
+	productIDStr := r.URL.Query().Get("id")
+	if productIDStr == "" {
+		return -1
+	}
+
+	productID, err := strconv.ParseInt(productIDStr, 10, 64)
+	if err != nil || productID < 0 {
+		return -1
+	}
+
+	return productID
 }

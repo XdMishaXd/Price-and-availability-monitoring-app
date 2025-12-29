@@ -1,7 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TABLE products
-(
+CREATE TABLE products (
 	id BIGSERIAL PRIMARY KEY,
 	user_id BIGINT NOT NULL,
 	url TEXT NOT NULL,

@@ -40,8 +40,9 @@ type RabbitMQ struct {
 }
 
 type Redis struct {
-	Addr string `yaml:"addr" env-default:"redis:6379"`
-	Db   int    `yaml:"db" env-default:"1"`
+	Addr       string        `yaml:"addr" env-default:"redis:6379"`
+	Db         int           `yaml:"db" env-default:"1"`
+	DefaultTTL time.Duration `yaml:"default_ttl" env-default:"1m"`
 }
 
 func MustLoad(configPath string) *Config {

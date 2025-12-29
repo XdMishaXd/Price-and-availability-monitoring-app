@@ -29,7 +29,7 @@ func NewConsumer(ch *amqp.Channel, log *slog.Logger, queueName string, poolSize 
 
 func (c *Consumer) Consume(
 	ctx context.Context,
-	handler HandlerFunc,
+	handler func(context.Context, []byte) error,
 ) error {
 	const op = "rabbitmq.Consume"
 
