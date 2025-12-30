@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	resp "main_service/internal/lib/api/response"
-	"main_service/internal/lib/jwt"
 	sl "main_service/internal/lib/logger"
 	authMiddlware "main_service/internal/middleware/auth"
 
@@ -24,10 +24,8 @@ type ProductsRemover interface {
 }
 
 func New(
-	ctx context.Context,
 	log *slog.Logger,
 	prodOp ProductsRemover,
-	jwtParser jwt.JWTParser,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.products.delete.New"
@@ -65,6 +63,9 @@ func New(
 
 			return
 		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
 
 		err := prodOp.DeleteProduct(ctx, productID, userID)
 		if err != nil {

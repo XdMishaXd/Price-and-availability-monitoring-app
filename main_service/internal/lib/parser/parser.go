@@ -33,8 +33,8 @@ func New(pg PostgresStorage, c Consumer) *Parser {
 	}
 }
 
-func (s *Parser) Run(ctx context.Context, consumer Consumer) error {
-	return consumer.Consume(ctx, s.handleMessage)
+func (s *Parser) Run(ctx context.Context) error {
+	return s.rabbitmqConsumer.Consume(ctx, s.handleMessage)
 }
 
 func (p *Parser) handleMessage(ctx context.Context, body []byte) error {

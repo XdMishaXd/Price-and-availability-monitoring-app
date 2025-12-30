@@ -4,9 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	resp "main_service/internal/lib/api/response"
-	"main_service/internal/lib/jwt"
 	sl "main_service/internal/lib/logger"
 	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/middleware/products"
@@ -27,10 +27,8 @@ type Response struct {
 }
 
 func New(
-	ctx context.Context,
 	log *slog.Logger,
-	prodOp products.ProductOperator,
-	jwtParser jwt.JWTParser,
+	prodOp *products.ProductOperator,
 	validate *validator.Validate,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +83,9 @@ func New(
 
 			return
 		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
 
 		productID, err := prodOp.SaveProduct(ctx, req.URL, req.Title, userID)
 		if err != nil {

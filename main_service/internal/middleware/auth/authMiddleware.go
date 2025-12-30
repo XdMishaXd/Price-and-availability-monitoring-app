@@ -16,7 +16,7 @@ type contextKey string
 
 const UserIDKey contextKey = "user_id"
 
-func New(log *slog.Logger, jwtParser jwt.JWTParser) func(next http.Handler) http.Handler {
+func New(log *slog.Logger, jwtParser *jwt.JWTParser) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			const op = "middleware.auth.New"

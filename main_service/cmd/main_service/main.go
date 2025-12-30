@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"main_service/internal/config"
 	addProduct "main_service/internal/http-server/handlers/products/add"
@@ -32,23 +34,19 @@ const (
 )
 
 func main() {
+	// * Загрузка конфига
 	cfg := config.MustLoad("./config/config.yaml")
 
+	// * Настройка логгера
 	log := setupLogger(cfg.Env)
 
 	log.Info("starting main service", slog.String("env", cfg.Env))
 
+	// * Context для Graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		log.Info("Shutdown signal received")
-		cancel()
-	}()
-
+	// * Инициализация jwtParser
 	jwtParser := jwt.New(cfg.JWTSecret)
 
 	// * Инициализация Redis
@@ -59,13 +57,25 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	// * Инициализация PosgreSQL
+	log.Info("redis connected successfully",
+		slog.String("addr", cfg.Redis.Addr),
+		slog.Int("db", cfg.Redis.Db),
+		slog.Duration("default_ttl", cfg.Redis.DefaultTTL),
+	)
+
+	// * Инициализация PostgreSQL
 	postgresClient, err := postgres.New(ctx, cfg)
 	if err != nil {
 		log.Error("failed to connect posgtreSQL", slog.String("err", err.Error()))
 		os.Exit(1)
 	}
 	defer postgresClient.Close()
+
+	log.Info("postgresql connected successfully",
+		slog.String("host", cfg.Postgres.Host),
+		slog.Int("port", cfg.Postgres.Port),
+		slog.String("database", cfg.Postgres.DBName),
+	)
 
 	// * Инициализация RabbitMQ
 	rabbitMQClient, err := rabbitmq.New(cfg.RabbitMQ.URL)
@@ -74,6 +84,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer rabbitMQClient.Close()
+
+	log.Info("rabbitmq connected successfully",
+		slog.Int("workers", cfg.RabbitMQ.WorkerPoolSize),
+	)
 
 	rabbitMQProducer := rabbitmq.NewProducer(
 		rabbitMQClient.Channel,
@@ -94,40 +108,96 @@ func main() {
 		cfg.CheckInterval,
 	)
 
-	// * Инициализация parser'а
+	// * Инициализация parser
 	parserClient := parser.New(postgresClient, rabbitMQConsumer)
 
-	requestValidator := validator.New()
+	log.Info("starting message parser")
+	if err := parserClient.Run(ctx); err != nil {
+		log.Error("failed to start parser", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	log.Info("parser started successfully")
 
+	// * Настройка роутера
+	requestValidator := validator.New()
 	router := setupRouter(
-		ctx,
 		log,
 		requestValidator,
 		postgresClient,
-		*prodOP,
-		*jwtParser,
+		prodOP,
+		jwtParser,
 	)
+
+	// * Инициализаця http сервера
+	srv := &http.Server{
+		Addr:           cfg.HTTPServer.Address,
+		Handler:        router,
+		ReadTimeout:    cfg.HTTPServer.Timeout,
+		WriteTimeout:   cfg.HTTPServer.Timeout,
+		IdleTimeout:    cfg.HTTPServer.IdleTimeout,
+		MaxHeaderBytes: 1 << 20, // * 1 MB
+	}
+
+	// * Запуск сервера
+	serverErrors := make(chan error, 1)
+	go func() {
+		log.Info("starting http server", slog.String("address", cfg.HTTPServer.Address))
+		serverErrors <- srv.ListenAndServe()
+	}()
+
+	// * graceful shutdown
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serverErrors:
+		log.Error("server error", slog.String("error", err.Error()))
+		os.Exit(1)
+
+	case sig := <-shutdown:
+		log.Info("shutdown signal received", slog.String("signal", sig.String()))
+
+		cancel()
+
+		// * Graceful shutdown context HTTP сервера
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+
+		log.Info("shutting down http server")
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Error("failed to shutdown server gracefully", slog.String("error", err.Error()))
+
+			if closeErr := srv.Close(); closeErr != nil {
+				log.Error("failed to force close server", slog.String("error", closeErr.Error()))
+			}
+		}
+
+		log.Info("server stopped gracefully")
+	}
 }
 
 func setupRouter(
-	ctx context.Context,
 	log *slog.Logger,
 	validate *validator.Validate,
 	postgres *postgres.PostgresRepo,
-	prodOP products.ProductOperator,
-	jwtParser jwt.JWTParser,
+	prodOP *products.ProductOperator,
+	jwtParser *jwt.JWTParser,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(authMiddlware.New(log, jwtParser))
 	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(middleware.Compress(5))
 
-	r.Post("/product", addProduct.New(ctx, log, prodOP, jwtParser, validate))
-	r.Get("/products", getProducts.New(ctx, log, jwtParser, postgres))
-	r.Get("/product", getByID.New(ctx, log, &prodOP, jwtParser))
-	r.Delete("/product", deleteProduct.New(ctx, log, postgres, jwtParser))
+	r.Post("/product", addProduct.New(log, prodOP, validate))
+	r.Get("/products", getProducts.New(log, postgres))
+	r.Get("/product", getByID.New(log, prodOP))
+	r.Delete("/product", deleteProduct.New(log, postgres))
 
 	return r
 }

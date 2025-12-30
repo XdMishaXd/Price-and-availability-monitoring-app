@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	resp "main_service/internal/lib/api/response"
-	"main_service/internal/lib/jwt"
 	sl "main_service/internal/lib/logger"
 	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/models"
@@ -41,9 +41,7 @@ type ProductsGetter interface {
 }
 
 func New(
-	ctx context.Context,
 	log *slog.Logger,
-	jwtParser jwt.JWTParser,
 	productsGetter ProductsGetter,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +73,9 @@ func New(
 
 			return
 		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
 
 		products, total, err := productsGetter.Products(ctx, userID, limit, offset)
 		if err != nil {
