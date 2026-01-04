@@ -1,0 +1,6 @@
+env: "dev" # local, dev, prod 
+
+rabbitmq:
+  url: "amqp://user:password@rabbitmq:5672/"
+  queue_name: "msgQueue"
+  worker_pool_size: 10
