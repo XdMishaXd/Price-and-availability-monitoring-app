@@ -17,7 +17,7 @@ type RedisStorage interface {
 }
 
 type PostgresStorage interface {
-	SaveProduct(ctx context.Context, userID int64, productURL, title string) (int64, error)
+	SaveProduct(ctx context.Context, userID int64, productURL, title string, marketplace models.Marketplace) (int64, error)
 	ProductByID(ctx context.Context, productID int64) (models.Product, error)
 }
 
@@ -41,15 +41,21 @@ func New(p PostgresStorage, r RedisStorage, rabbit RabbitMQProducer, checkInterv
 	}
 }
 
-func (p *ProductOperator) SaveProduct(ctx context.Context, url, title string, userID int64) (int64, error) {
-	productID, err := p.Postgres.SaveProduct(ctx, userID, url, title)
+func (p *ProductOperator) SaveProduct(
+	ctx context.Context,
+	url, title string,
+	userID int64,
+	marketplace models.Marketplace,
+) (int64, error) {
+	productID, err := p.Postgres.SaveProduct(ctx, userID, url, title, marketplace)
 	if err != nil {
 		return 0, err
 	}
 
 	product := models.ProductForProducer{
-		ID:  productID,
-		URL: url,
+		ID:          productID,
+		URL:         url,
+		Marketplace: marketplace,
 	}
 
 	data, err := json.Marshal(product)

@@ -47,18 +47,23 @@ func New(ctx context.Context, cfg *config.Config) (*PostgresRepo, error) {
 }
 
 // * SaveProduct добавляет продукт в базу данных
-func (r *PostgresRepo) SaveProduct(ctx context.Context, userID int64, productURL, title string) (int64, error) {
+func (r *PostgresRepo) SaveProduct(
+	ctx context.Context,
+	userID int64,
+	productURL, title string,
+	marketplace models.Marketplace,
+) (int64, error) {
 	const op = "storage.postgres.SaveProduct"
 
 	const query = `
-		INSERT INTO products (user_id, url, title)
-		VALUES ($1, $2, $3)
+		INSERT INTO products (user_id, url, title, marketplace)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`
 
 	var id int64
 
-	err := r.pool.QueryRow(ctx, query, userID, productURL, title).Scan(&id)
+	err := r.pool.QueryRow(ctx, query, userID, productURL, title, marketplace).Scan(&id)
 	if err != nil {
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == storage.UniqueViolation {
 			return 0, storage.ErrUserAlreadyTracksProduct
@@ -90,7 +95,7 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 
 	// * Получаем продукты
 	query := `
-    SELECT id, url, title, price, in_stock, user_id, last_checked, created_at, updated_at
+    SELECT id, url, title, marketplace, price, in_stock, user_id, last_checked, created_at, updated_at
       FROM products
       WHERE user_id = $1
       ORDER BY created_at DESC
@@ -128,7 +133,7 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 	const op = "storage.postgres.ProductByID"
 
 	const query = `
-		SELECT id, title, price, in_stock, last_checked, created_at, updated_at
+		SELECT id, url, title, marketplace, price, in_stock, user_id, last_checked, created_at, updated_at
 		FROM products
 		WHERE id = $1
 	`
@@ -141,6 +146,7 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 		&p.ID,
 		&p.Title,
 		&p.Price,
+		&p.Marketplace,
 		&p.In_stock,
 		&p.Last_checked,
 		&p.Created_at,

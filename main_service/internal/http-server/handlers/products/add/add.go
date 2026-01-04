@@ -4,12 +4,15 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	resp "main_service/internal/lib/api/response"
 	sl "main_service/internal/lib/logger"
 	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/middleware/products"
+	"main_service/internal/models"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -65,6 +68,16 @@ func New(
 			return
 		}
 
+		marketplace := parseMarketplace(req.URL)
+		if marketplace == "" {
+			log.Error("Marketplace undefined")
+
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error("Marketplace undefined"))
+
+			return
+		}
+
 		userID, ok := r.Context().Value(authMiddlware.UserIDKey).(int64)
 		if !ok {
 			log.Error("User ID not found in context")
@@ -87,7 +100,7 @@ func New(
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 
-		productID, err := prodOp.SaveProduct(ctx, req.URL, req.Title, userID)
+		productID, err := prodOp.SaveProduct(ctx, req.URL, req.Title, userID, marketplace)
 		if err != nil {
 			log.Error("Failed to save product", sl.Err(err))
 
@@ -104,6 +117,26 @@ func New(
 
 		render.Status(r, http.StatusCreated)
 		ResponseOK(w, r, productID)
+	}
+}
+
+func parseMarketplace(urlStr string) models.Marketplace {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return ""
+	}
+
+	host := strings.ToLower(u.Hostname())
+
+	switch {
+	case strings.Contains(host, "etsy.com"):
+		return models.Etsy
+	case strings.Contains(host, "ebay.com"):
+		return models.Ebay
+	case strings.Contains(host, "aliexpress.com") || strings.Contains(host, "aliexpress.ru"):
+		return models.Aliexpress
+	default:
+		return ""
 	}
 }
 

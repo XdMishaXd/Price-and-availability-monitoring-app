@@ -4,6 +4,7 @@ CREATE TABLE products (
 	id BIGSERIAL PRIMARY KEY,
 	user_id BIGINT NOT NULL,
 	url TEXT NOT NULL,
+	marketplace TEXT NOT NULL,
 	title TEXT NOT NULL,
 	price INTEGER DEFAULT -1,
 	in_stock BOOLEAN DEFAULT FALSE,
