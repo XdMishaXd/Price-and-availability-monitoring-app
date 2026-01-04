@@ -16,7 +16,7 @@ postgres:
   port: 5432
   user: "user"
   password: "password"
-  dbname: "price_monitoring_app"
+  dbname: "auth_service"
   sslmode: "disable"
 
 rabbitmq:

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"auth_service/internal/auth"
 	resp "auth_service/internal/lib/api/response"
@@ -26,10 +27,9 @@ type Response struct {
 }
 
 func New(
-	ctx context.Context,
 	log *slog.Logger,
 	validate *validator.Validate,
-	authMiddleware auth.Auth,
+	authMiddleware *auth.Auth,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.refresh.New"
@@ -56,13 +56,16 @@ func New(
 		if err := validate.Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
 
-			render.Status(r, http.StatusBadRequest)
 			log.Error("Invalid request", sl.Err(err))
 
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.ValidationError(validateErr))
 
 			return
 		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
 
 		accessToken, newRefreshToken, err := authMiddleware.Refresh(ctx, req.RefreshToken)
 		if err != nil {

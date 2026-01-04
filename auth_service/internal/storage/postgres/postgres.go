@@ -1,15 +1,17 @@
 package postgres
 
 import (
-	"auth_service/internal/config"
-	"auth_service/internal/models"
-	"auth_service/internal/storage"
 	"context"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx"
+	"auth_service/internal/config"
+	"auth_service/internal/models"
+	"auth_service/internal/storage"
+
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -38,23 +40,28 @@ func New(ctx context.Context, cfg *config.Config) (*PostgresRepo, error) {
 		return nil, fmt.Errorf("%s: failed to create pool: %w", op, err)
 	}
 
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("%s: failed to ping database: %w", op, err)
+	}
+
 	return &PostgresRepo{pool: pool}, nil
 }
 
-func (r *PostgresRepo) SaveUser(ctx context.Context, email, first_name, last_name string, passHash []byte) (int64, error) {
+func (r *PostgresRepo) SaveUser(ctx context.Context, email, username string, passHash []byte) (int64, error) {
 	const op = "storage.postgres.SaveUser"
 
 	query := `
-		INSERT INTO users (email, first_name, last_name, password_hash)
+		INSERT INTO users (email, username, password_hash)
 		VALUES ($1, $2, $3)
 		RETURNING id;
 	`
 
 	var id int64
 
-	err := r.pool.QueryRow(ctx, query, email, first_name, last_name, string(passHash)).Scan(&id)
+	err := r.pool.QueryRow(ctx, query, email, username, string(passHash)).Scan(&id)
 	if err != nil {
-		if pgErr, ok := err.(*pgx.PgError); ok && pgErr.Code == "23505" {
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
 			return 0, storage.ErrUserExists
 		}
 
@@ -66,7 +73,7 @@ func (r *PostgresRepo) SaveUser(ctx context.Context, email, first_name, last_nam
 
 func (r *PostgresRepo) User(ctx context.Context, email string) (models.User, error) {
 	query := `
-		SELECT id, email, first_name, last_name, password_hash, is_verified
+		SELECT id, email, username, password_hash, is_verified
 		FROM users
 		WHERE email = $1;
 	`
@@ -77,13 +84,16 @@ func (r *PostgresRepo) User(ctx context.Context, email string) (models.User, err
 	err := row.Scan(
 		&u.ID,
 		&u.Email,
-		&u.FirstName,
-		&u.LastName,
+		&u.Username,
 		&u.PassHash,
 		&u.IsVerified,
 	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return models.User{}, storage.ErrUserNotFound
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.User{}, storage.ErrUserNotFound
+		}
+
+		return models.User{}, err
 	}
 
 	return u, err
@@ -91,7 +101,7 @@ func (r *PostgresRepo) User(ctx context.Context, email string) (models.User, err
 
 func (r *PostgresRepo) UserByID(ctx context.Context, id int64) (models.User, error) {
 	query := `
-		SELECT id, email, first_name, last_name, password_hash, is_verified
+		SELECT id, email, username, password_hash, is_verified
 		FROM users
 		WHERE id = $1;
 	`
@@ -102,8 +112,7 @@ func (r *PostgresRepo) UserByID(ctx context.Context, id int64) (models.User, err
 	err := row.Scan(
 		&u.ID,
 		&u.Email,
-		&u.FirstName,
-		&u.LastName,
+		&u.Username,
 		&u.PassHash,
 		&u.IsVerified,
 	)

@@ -1,6 +1,6 @@
 module email_sender
 
-go 1.25.5
+go 1.25.3
 
 require (
 	github.com/ilyakaznacheev/cleanenv v1.5.0

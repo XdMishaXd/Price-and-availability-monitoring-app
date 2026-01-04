@@ -55,10 +55,6 @@ USER appuser
 
 EXPOSE 8080
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-	CMD curl -f http://localhost:8080/health || exit 1
-
 # Метаданные
 LABEL version="${VERSION}"
 LABEL build.time="${BUILD_TIME}"

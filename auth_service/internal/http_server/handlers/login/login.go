@@ -5,10 +5,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"auth_service/internal/auth"
 	resp "auth_service/internal/lib/api/response"
 	sl "auth_service/internal/lib/logger"
+	"auth_service/internal/storage"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -27,10 +29,10 @@ type Response struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func New(ctx context.Context,
+func New(
 	log *slog.Logger,
 	validate *validator.Validate,
-	authMiddleware auth.Auth,
+	authMiddleware *auth.Auth,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.login.New"
@@ -57,29 +59,31 @@ func New(ctx context.Context,
 		if err := validate.Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
 
-			render.Status(r, http.StatusBadRequest)
 			log.Error("Invalid request", sl.Err(err))
 
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.ValidationError(validateErr))
 
 			return
 		}
 
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
 		accessToken, refreshToken, err := authMiddleware.Login(ctx, req.Email, req.Pass, req.AppID)
 		if err != nil {
-			if errors.Is(err, auth.ErrInvalidCredentials) {
+			switch {
+			case errors.Is(err, storage.ErrUserNotFound):
+				render.JSON(w, r, resp.Error("User not found"))
+				return
+			case errors.Is(err, auth.ErrInvalidCredentials):
 				render.JSON(w, r, resp.Error("Invalid credentials"))
-
 				return
-			}
-			if errors.Is(err, auth.ErrInvalidCredentials) {
+			case errors.Is(err, auth.ErrInvalidAppID):
 				render.JSON(w, r, resp.Error("Invalid app id"))
-
 				return
-			}
-			if errors.Is(err, auth.ErrInvalidCredentials) {
+			case errors.Is(err, auth.ErrEmailNotVerified):
 				render.JSON(w, r, resp.Error("email is not verified"))
-
 				return
 			}
 

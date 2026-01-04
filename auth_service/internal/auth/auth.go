@@ -1,16 +1,17 @@
 package auth
 
 import (
-	"auth_service/internal/lib/jwt"
-	sl "auth_service/internal/lib/logger"
-	"auth_service/internal/lib/verification"
-	"auth_service/internal/models"
-	"auth_service/internal/storage"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
+
+	"auth_service/internal/lib/jwt"
+	sl "auth_service/internal/lib/logger"
+	"auth_service/internal/lib/verification"
+	"auth_service/internal/models"
+	"auth_service/internal/storage"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -32,7 +33,7 @@ type Auth struct {
 }
 
 type UserSaver interface {
-	SaveUser(ctx context.Context, email, first_name, last_name string, passHash []byte) (int64, error)
+	SaveUser(ctx context.Context, email string, username string, passHash []byte) (uid int64, err error)
 
 	SaveRefreshToken(ctx context.Context, userID int64, appID int32, tokenHash []byte, expiresAt time.Time) error
 	UpdateRefreshToken(ctx context.Context, userID int64, oldTokenHash, newTokenHash []byte, expiresAt time.Time) error
@@ -74,13 +75,14 @@ func (a *Auth) Login(
 	appID int32,
 ) (accessToken string, refreshToken string, err error) {
 	const op = "Auth.Login"
+
 	log := a.log.With(slog.String("op", op))
 
 	user, err := a.usrProvider.User(ctx, email)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			log.Warn("user not found")
-			return "", "", ErrInvalidCredentials
+			return "", "", storage.ErrUserNotFound
 		}
 
 		log.Error("failed to get user", sl.Err(err))
@@ -132,8 +134,7 @@ func (a *Auth) Login(
 func (a *Auth) RegisterNewUser(
 	ctx context.Context,
 	email string,
-	first_name string,
-	last_name string,
+	username string,
 	pass string,
 ) (int64, error) {
 	const op = "auth.registerNewUser"
@@ -150,7 +151,7 @@ func (a *Auth) RegisterNewUser(
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
-	id, err := a.usrSaver.SaveUser(ctx, email, first_name, last_name, passHash)
+	id, err := a.usrSaver.SaveUser(ctx, email, username, passHash)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserExists) {
 			log.Warn("User already exists")

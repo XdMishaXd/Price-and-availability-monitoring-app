@@ -17,10 +17,9 @@ import (
 )
 
 type Request struct {
-	Email     string `json:"email" validate:"required,email"`
-	FirstName string `json:"first_name" validate:"required"`
-	LastName  string `json:"last_name" validate:"required"`
-	Pass      string `json:"password" validate:"required"`
+	Email    string `json:"email" validate:"required,email"`
+	Username string `json:"username" validate:"required"`
+	Pass     string `json:"password" validate:"required"`
 }
 
 type Response struct {
@@ -29,10 +28,9 @@ type Response struct {
 }
 
 func New(
-	ctx context.Context,
 	log *slog.Logger,
 	validate *validator.Validate,
-	authMiddleware auth.Auth,
+	authMiddleware *auth.Auth,
 	msgSender verification.Publisher,
 	verificationTokenTTL time.Duration,
 	verificationTokenSecret string,
@@ -52,6 +50,7 @@ func New(
 		if err != nil {
 			log.Error("Failed to decode request body", sl.Err(err))
 
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("Failed to decode request"))
 
 			return
@@ -70,7 +69,10 @@ func New(
 			return
 		}
 
-		userID, err := authMiddleware.RegisterNewUser(ctx, req.Email, req.FirstName, req.LastName, req.Pass)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		userID, err := authMiddleware.RegisterNewUser(ctx, req.Email, req.Username, req.Pass)
 		if err != nil {
 			log.Error("failed to register user", sl.Err(err))
 
@@ -101,7 +103,6 @@ func New(
 			return
 		}
 
-		render.Status(r, http.StatusCreated)
 		ResponseOK(w, r, userID)
 	}
 }

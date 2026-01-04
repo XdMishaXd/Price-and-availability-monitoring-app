@@ -34,22 +34,18 @@ const (
 )
 
 func main() {
-	// * Загрузка конфига
 	cfg := config.MustLoad("./config/config.yaml")
 
-	// * Настройка логгера
 	log := setupLogger(cfg.Env)
 
 	log.Info("starting main service", slog.String("env", cfg.Env))
 
-	// * Context для Graceful shutdown
+	// * Context для иницализации компонентов
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// * Инициализация jwtParser
 	jwtParser := jwt.New(cfg.JWTSecret)
 
-	// * Инициализация Redis
 	redisClient, err := redis.New(ctx, cfg.Redis.Addr, cfg.Redis.Db, cfg.Redis.DefaultTTL)
 	if err != nil {
 		log.Error("failed to connect redis", slog.String("err", err.Error()))
@@ -63,7 +59,6 @@ func main() {
 		slog.Duration("default_ttl", cfg.Redis.DefaultTTL),
 	)
 
-	// * Инициализация PostgreSQL
 	postgresClient, err := postgres.New(ctx, cfg)
 	if err != nil {
 		log.Error("failed to connect posgtreSQL", slog.String("err", err.Error()))
@@ -77,7 +72,6 @@ func main() {
 		slog.String("database", cfg.Postgres.DBName),
 	)
 
-	// * Инициализация RabbitMQ
 	rabbitMQClient, err := rabbitmq.New(cfg.RabbitMQ.URL)
 	if err != nil {
 		log.Error("failed to connect rabbitMQ", slog.String("err", err.Error()))
@@ -100,7 +94,6 @@ func main() {
 		cfg.RabbitMQ.WorkerPoolSize,
 	)
 
-	// * Инициализация Products Middleware
 	prodOP := products.New(
 		postgresClient,
 		redisClient,
@@ -108,7 +101,6 @@ func main() {
 		cfg.CheckInterval,
 	)
 
-	// * Инициализация parser
 	parserClient := parser.New(postgresClient, rabbitMQConsumer)
 
 	log.Info("starting message parser")
@@ -118,8 +110,8 @@ func main() {
 	}
 	log.Info("parser started successfully")
 
-	// * Настройка роутера
 	requestValidator := validator.New()
+
 	router := setupRouter(
 		log,
 		requestValidator,
@@ -128,7 +120,6 @@ func main() {
 		jwtParser,
 	)
 
-	// * Инициализаця http сервера
 	srv := &http.Server{
 		Addr:           cfg.HTTPServer.Address,
 		Handler:        router,
@@ -138,7 +129,6 @@ func main() {
 		MaxHeaderBytes: 1 << 20, // * 1 MB
 	}
 
-	// * Запуск сервера
 	serverErrors := make(chan error, 1)
 	go func() {
 		log.Info("starting http server", slog.String("address", cfg.HTTPServer.Address))
@@ -159,7 +149,7 @@ func main() {
 
 		cancel()
 
-		// * Graceful shutdown context HTTP сервера
+		// * Graceful shutdown context
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer shutdownCancel()
 
